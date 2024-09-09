@@ -2,33 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
 )
-
-func getBody(url string) (string, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-
-	if res.StatusCode != 200 {
-		return "", err
-	}
-
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(body), nil
-}
 
 func getURLsFromHTML(htmlBody, rawBaseURL string) ([]string, error) {
 	baseURL, err := url.Parse(rawBaseURL)

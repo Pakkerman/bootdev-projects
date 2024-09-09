@@ -16,14 +16,14 @@ func main() {
 	}
 
 	url := os.Args[1]
-
 	fmt.Println("starting crawl of:", url)
 
-	body, err := getBody(url)
+	body, err := getHTML(url)
 	if err != nil {
 		fmt.Println(err)
 	}
 
+	fmt.Println(body)
 	urls, _ := getURLsFromHTML(body, url)
 	for _, url := range urls {
 		fmt.Println(url)
