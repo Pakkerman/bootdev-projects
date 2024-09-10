@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -25,20 +26,35 @@ func getURLsFromHTML(htmlBody, rawBaseURL string) ([]string, error) {
 	var traverse func(*html.Node)
 	traverse = func(n *html.Node) {
 		// Check if the node is an <a> element with an href attribute
-		if n.Type == html.ElementNode && n.Data == "a" {
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					// Resolve relative URLs
-					link, err := baseURL.Parse(attr.Val)
-					if err == nil {
-						urls = append(urls, link.String())
-					}
-				}
+		if n.Type != html.ElementNode || n.Data != "a" {
+			// Continue traversing child nodes
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				traverse(c)
 			}
 		}
-		// Continue traversing child nodes
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			traverse(c)
+		// append url
+		for _, attr := range n.Attr {
+			if attr.Key != "href" {
+				continue
+			}
+
+			// Resolve relative URLs
+			link, err := baseURL.Parse(attr.Val)
+			if err != nil {
+				continue
+			}
+			// omit link to headings
+			if link.Fragment != "" {
+				continue
+			}
+
+			// omit .css, .png... etc
+			ext := path.Ext(link.Path)
+			if ext != "" {
+				continue
+			}
+
+			urls = append(urls, link.String())
 		}
 	}
 

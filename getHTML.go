@@ -5,10 +5,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func getHTML(rawURL string) (string, error) {
-	res, err := http.Get(rawURL)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	res, err := client.Get(rawURL)
 	if err != nil {
 		return "", err
 	}
