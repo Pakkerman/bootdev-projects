@@ -4,9 +4,22 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sync"
+	"time"
 )
 
+type config struct {
+	pages   map[string]int
+	baseURL *url.URL
+	mu      *sync.Mutex
+	wg      *sync.WaitGroup
+	buffer  chan struct{}
+	counter int
+}
+
 func main() {
+	start := time.Now()
+
 	if len(os.Args) < 2 {
 		fmt.Println("no website provided")
 		os.Exit(1)
@@ -16,43 +29,54 @@ func main() {
 		os.Exit(1)
 	}
 
-	url := os.Args[1]
-	fmt.Println("starting crawl of:", url)
+	parsedURL, err := url.Parse(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
-	pages := make(map[string]int)
+	fmt.Println("starting crawl of:", parsedURL.String())
 
-	counter := 1
-	crawlPage(url, url, pages, &counter)
+	cfg := config{
+		pages:   make(map[string]int),
+		baseURL: parsedURL,
+		mu:      &sync.Mutex{},
+		wg:      &sync.WaitGroup{},
+		buffer:  make(chan struct{}, 10),
+		counter: 0,
+	}
+
+	cfg.crawlPage(cfg.baseURL.String())
+	cfg.wg.Wait()
+
+	fmt.Printf("Pages crawled: %v\n", cfg.counter)
+	fmt.Printf("Elapsed time: %s\n", time.Since(start))
 }
 
-func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int, counter *int) {
-	fmt.Println("\ncrawling page:", rawCurrentURL)
-	fmt.Println("Pages Crawled", *counter)
+func (cfg *config) crawlPage(rawCurrentURL string) {
+	cfg.wg.Add(1)
+	defer func() {
+		cfg.wg.Done()
+		cfg.incrementCounter()
+	}()
 
-	parsedBase, _ := url.Parse(rawBaseURL)
+	fmt.Println("crawling page:", rawCurrentURL)
 
 	body, err := getHTML(rawCurrentURL)
 	if err != nil {
-		fmt.Println(err)
+		// fmt.Println(err)
 		return
 	}
 
 	urls, _ := getURLsFromHTML(body, rawCurrentURL)
-	fmt.Printf("\tfound %v urls on this page\n", len(urls))
 
-	// for _, item := range urls {
-	// 	fmt.Println(item)
-	// }
-	//
-
+	var unvisited []string
 	for _, link := range urls {
-		fmt.Println("\tProcessing: ", link)
+		// fmt.Println("\tProcessing: ", link)
 
 		parsedLink, _ := url.Parse(link)
-		if parsedLink.Host != parsedBase.Host {
+		if parsedLink.Host != cfg.baseURL.Host {
 			continue
-			fmt.Printf("\t%v going out of domain, move on\n", link)
-
 		}
 
 		normalizedURL, err := normalizeURL(link)
@@ -61,22 +85,46 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int, counter *
 			continue
 		}
 
-		_, ok := pages[normalizedURL]
-		if ok {
-			pages[normalizedURL] += 1
-			// printMap(pages)
-
+		isFirst := cfg.addPageVisit(normalizedURL)
+		if !isFirst {
 			continue
 		}
 
-		pages[normalizedURL] = 1
-		*counter++
-		crawlPage(rawBaseURL, link, pages, counter)
+		unvisited = append(unvisited, link)
+	}
+
+	if len(unvisited) == 0 {
+		return
+	}
+
+	fmt.Println("\tunvisited urls on this page: ", len(unvisited))
+
+	for _, link := range unvisited {
+		go func(link string) {
+			cfg.buffer <- struct{}{}
+			cfg.crawlPage(link)
+			<-cfg.buffer
+		}(link)
 	}
 }
 
-func printMap(input map[string]int) {
-	for key, value := range input {
-		fmt.Printf("%v: %v (%v entries)\n", key, value, len(input))
+func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+
+	_, ok := cfg.pages[normalizedURL]
+	if ok {
+		cfg.pages[normalizedURL] += 1
+		return false
 	}
+
+	cfg.pages[normalizedURL] = 1
+	return true
+}
+
+func (cfg *config) incrementCounter() {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+
+	cfg.counter++
 }
