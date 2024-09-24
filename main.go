@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -73,11 +75,14 @@ func main() {
 	cfg.wg.Wait()
 
 	fmt.Println("=============================")
-	fmt.Println("REPORT for ", cfg.baseURL)
+	fmt.Println("REPORT for", cfg.baseURL)
+	fmt.Println("=============================")
+	cfg.printReport()
+
 	fmt.Println("=============================")
 	fmt.Printf("Pages crawled: %v\n", cfg.counter)
 	fmt.Printf("Elapsed time: %s\n", time.Since(start))
-	cfg.printReport()
+	fmt.Println("=============================")
 }
 
 func (cfg *config) crawlPage(rawCurrentURL string) {
@@ -165,7 +170,26 @@ func (cfg config) pagesMaxed() bool {
 }
 
 func (cfg config) printReport() {
-	for key, value := range cfg.pages {
-		fmt.Println(key, value)
+	type kv struct {
+		url    string
+		visits int
+	}
+
+	var sortedSlice []kv
+
+	for k, v := range cfg.pages {
+		sortedSlice = append(sortedSlice, kv{k, v})
+	}
+
+	slices.SortFunc(sortedSlice, func(a, b kv) int {
+		return cmp.Or(
+			cmp.Compare(b.visits, a.visits),
+			cmp.Compare(a.url, b.url),
+		)
+	})
+
+	// Print the sorted slice
+	for _, kv := range sortedSlice {
+		fmt.Printf("Found %v internal links to %v\n", kv.visits, kv.url)
 	}
 }
