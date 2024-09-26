@@ -13,6 +13,7 @@ import (
 
 type config struct {
 	pages          map[string]int
+	externalLinks  map[string]int
 	baseURL        *url.URL
 	mu             *sync.Mutex
 	wg             *sync.WaitGroup
@@ -20,6 +21,11 @@ type config struct {
 	counter        int
 	maxPages       int
 	maxConcurrency int
+}
+
+type sortedLinks struct {
+	url    string
+	visits int
 }
 
 func main() {
@@ -59,6 +65,7 @@ func main() {
 
 	cfg := config{
 		pages:          make(map[string]int),
+		externalLinks:  make(map[string]int),
 		baseURL:        parsedURL,
 		mu:             &sync.Mutex{},
 		wg:             &sync.WaitGroup{},
@@ -107,6 +114,7 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 
 		parsedLink, _ := url.Parse(link)
 		if parsedLink.Host != cfg.baseURL.Host {
+			cfg.addExternalLink(parsedLink.String())
 			continue
 		}
 
@@ -146,13 +154,13 @@ func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
 	defer cfg.mu.Unlock()
 
 	_, ok := cfg.pages[normalizedURL]
-	if ok {
-		cfg.pages[normalizedURL] += 1
-		return false
+	if !ok {
+		cfg.pages[normalizedURL] = 1
+		return true
 	}
 
-	cfg.pages[normalizedURL] = 1
-	return true
+	cfg.pages[normalizedURL] += 1
+	return false
 }
 
 func (cfg *config) incrementCounter() {
@@ -170,26 +178,43 @@ func (cfg config) pagesMaxed() bool {
 }
 
 func (cfg config) printReport() {
-	type kv struct {
-		url    string
-		visits int
+	pagesSorted := sortLinks(cfg.pages)
+	externalLinksSorted := sortLinks(cfg.externalLinks)
+	// Print the sorted slice                                    a
+	fmt.Println("======== internal links =======")
+	for _, item := range pagesSorted {
+		fmt.Printf("%v link to %v%v\n", item.visits, cfg.baseURL.String(), item.url)
 	}
 
-	var sortedSlice []kv
+	fmt.Println("======= external links ========")
+	for _, item := range externalLinksSorted {
+		fmt.Printf("%v link to %v\n", item.visits, item.url)
+	}
+}
 
-	for k, v := range cfg.pages {
-		sortedSlice = append(sortedSlice, kv{k, v})
+func sortLinks(input map[string]int) []sortedLinks {
+	var sortedSlice []sortedLinks
+
+	for k, v := range input {
+		sortedSlice = append(sortedSlice, sortedLinks{k, v})
 	}
 
-	slices.SortFunc(sortedSlice, func(a, b kv) int {
+	slices.SortFunc(sortedSlice, func(a, b sortedLinks) int {
 		return cmp.Or(
 			cmp.Compare(b.visits, a.visits),
 			cmp.Compare(a.url, b.url),
 		)
 	})
 
-	// Print the sorted slice
-	for _, kv := range sortedSlice {
-		fmt.Printf("Found %v internal links to %v\n", kv.visits, kv.url)
+	return sortedSlice
+}
+
+func (cfg config) addExternalLink(link string) {
+	_, ok := cfg.externalLinks[link]
+	if !ok {
+		cfg.externalLinks[link] = 1
+		return
 	}
+
+	cfg.externalLinks[link]++
 }
