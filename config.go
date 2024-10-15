@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+
+	"github.com/pakkerman/web-crawler-go/helpers/links"
 )
 
 type config struct {
@@ -16,11 +18,6 @@ type config struct {
 	counter        int
 	maxPages       int
 	maxConcurrency int
-}
-
-type sortedLinks struct {
-	url    string
-	visits int
 }
 
 func (cfg *config) crawlPage(rawCurrentURL string) {
@@ -106,17 +103,17 @@ func (cfg config) pagesMaxed() bool {
 }
 
 func (cfg config) printReport() {
-	pagesSorted := sortLinks(cfg.pages)
-	externalLinksSorted := sortLinks(cfg.externalLinks)
+	pagesSorted := links.SortLinks(cfg.pages)
+	externalLinksSorted := links.SortLinks(cfg.externalLinks)
 	// Print the sorted slice                                    a
 	fmt.Println("======== internal links =======")
 	for _, item := range pagesSorted {
-		fmt.Printf("%v link to %v%v\n", item.visits, cfg.baseURL.String(), item.url)
+		fmt.Printf("%v link to %v%v\n", item.Visits, cfg.baseURL.String(), item.Url)
 	}
 
 	fmt.Println("======= external links ========")
 	for _, item := range externalLinksSorted {
-		fmt.Printf("%v link to %v\n", item.visits, item.url)
+		fmt.Printf("%v link to %v\n", item.Visits, item.Url)
 	}
 }
 
@@ -143,16 +140,16 @@ func (cfg config) outputCSV() {
 	header := []string{"type", "count", "url"}
 	writeCSVRecord(writer, header)
 
-	internal := sortLinks(cfg.pages)
-	external := sortLinks(cfg.externalLinks)
+	internal := links.SortLinks(cfg.pages)
+	external := links.SortLinks(cfg.externalLinks)
 
 	var records [][]string
 	for _, item := range internal {
-		records = append(records, []string{"internal", fmt.Sprint(item.visits), item.url})
+		records = append(records, []string{"internal", fmt.Sprint(item.Visits), item.Url})
 	}
 
 	for _, item := range external {
-		records = append(records, []string{"external", fmt.Sprint(item.visits), item.url})
+		records = append(records, []string{"external", fmt.Sprint(item.Visits), item.Url})
 	}
 
 	for _, record := range records {

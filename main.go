@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/pakkerman/web-crawler-go/graph"
 )
 
 func main() {
@@ -74,4 +76,6 @@ func main() {
 
 	fmt.Println("Links output to links.csv ")
 	cfg.outputCSV()
+
+	graph.RenderGraph()
 }
